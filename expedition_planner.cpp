@@ -1,21 +1,4 @@
-// ============================================================================
-// Intelligent Archaeological Expedition Planner
-// A Graph-Based Dynamic Exploration Strategy System (C++17)
-//
-// Build : g++ -std=c++17 -O2 -o expedition_planner expedition_planner.cpp
-// Run   : ./expedition_planner
-//
-// Model
-//   * Chamber  = graph node  (exploration cost, artifact value, artifacts granted)
-//   * Passage  = directed edge (may need artifacts to open, may be active/inactive)
-//   * Planner  = greedy best-first search. At every step it rebuilds a priority
-//                queue of reachable, unvisited chambers ordered by
-//                (artifact value / exploration cost) and explores the best one.
-//   * Events   = "when chamber X is explored, reveal/seal passage Y".
-//                Because the frontier is rebuilt every step, the planner reacts
-//                to these changes immediately.
-//   * Baseline = brute-force search (static graphs) to check near-optimality.
-// ============================================================================
+
 #include <algorithm>
 #include <functional>
 #include <iomanip>
@@ -27,24 +10,21 @@
 
 using namespace std;
 
-// ----------------------------------------------------------------------------
-// Data structures
-// ----------------------------------------------------------------------------
 struct Chamber {
     int id;
     string name;
-    int cost;                  // exploration cost (time/manpower units)
-    int value;                 // historical artifact value
-    vector<string> grants;     // artifacts obtained by exploring this chamber
+    int cost;                  
+    int value;                 
+    vector<string> grants;     
 };
 
 struct Passage {
     int from, to;
-    vector<string> requires_;  // artifacts needed to use this passage
-    bool active;               // false = hidden (not yet revealed) or sealed
+    vector<string> requires_;  
+    bool active;               
 };
 
-// "When chamber `trigger` is explored, set passage `passage` to `activate`."
+
 struct Event {
     int trigger;
     int passage;
@@ -56,7 +36,7 @@ class Site {
 public:
     vector<Chamber> chambers;
     vector<Passage> passages;
-    vector<vector<int>> adj;   // adjacency list: chamber id -> passage indices
+    vector<vector<int>> adj;   
 
     int addChamber(const string& name, int cost, int value,
                    const vector<string>& grants = {}) {
@@ -77,23 +57,21 @@ public:
     void setActive(int passageIdx, bool a) { passages[passageIdx].active = a; }
 };
 
-// ----------------------------------------------------------------------------
-// Planner
-// ----------------------------------------------------------------------------
+
 struct Candidate {
     double ratio;
     int value;
     int chamber;
-    // priority_queue is a max-heap: "less" means lower priority
+    
     bool operator<(const Candidate& o) const {
         if (ratio != o.ratio) return ratio < o.ratio;
         if (value != o.value) return value < o.value;
-        return chamber > o.chamber;            // tie-break: smaller id first
+        return chamber > o.chamber;            
     }
 };
 
 struct PlanResult {
-    vector<int> order;     // chambers in the order explored (excluding entrance)
+    vector<int> order;     
     int totalValue = 0;
     int totalCost = 0;
 };
@@ -112,8 +90,7 @@ static string join(const vector<string>& v) {
 
 class Planner {
 public:
-    // Greedy best-first exploration. `site` is copied so events do not
-    // permanently modify the caller's graph.
+   
     static PlanResult plan(Site site, int start, int budget,
                            const vector<Event>& events = {},
                            bool verbose = true) {
@@ -141,23 +118,22 @@ public:
 
         int step = 0;
         while (true) {
-            // 1. Rebuild the frontier with up-to-date information
+            
             priority_queue<Candidate> pq;
             for (int v = 0; v < n; ++v) {
                 if (!visited[v]) continue;
                 for (int e : site.adj[v]) {
                     const Passage& p = site.passages[e];
-                    if (!p.active || visited[p.to]) continue;      // sealed/hidden or done
-                    if (!hasAll(p.requires_, artifacts)) continue; // still locked
+                    if (!p.active || visited[p.to]) continue;      
+                    if (!hasAll(p.requires_, artifacts)) continue; 
                     const Chamber& c = site.chambers[p.to];
-                    if (c.cost > remaining) continue;              // can't afford
+                    if (c.cost > remaining) continue;             
                     pq.push({(double)c.value / max(c.cost, 1), c.value, c.id});
                 }
             }
             if (pq.empty()) break;
 
-            // 2. Explore the best chamber (duplicates in pq are harmless:
-            //    we mark visited right away)
+            
             int best = pq.top().chamber;
             visit(best, false);
             ++step;
@@ -172,7 +148,7 @@ public:
                 cout << "\n";
             }
 
-            // 3. Apply dynamic events triggered by this chamber
+            
             for (const auto& ev : events) {
                 if (ev.trigger != best) continue;
                 site.setActive(ev.passage, ev.activate);
@@ -185,7 +161,7 @@ public:
             cout << "  Result: value=" << res.totalValue << ", cost="
                  << res.totalCost << "/" << budget << ", chambers explored="
                  << res.order.size() << "\n";
-            // Report what was left behind and why
+            
             for (int c = 0; c < n; ++c) {
                 if (visited[c]) continue;
                 cout << "  Not explored: \"" << site.chambers[c].name << "\" - ";
@@ -215,10 +191,8 @@ public:
     }
 };
 
-// ----------------------------------------------------------------------------
-// Brute-force baseline (static graph, no events): tries every valid ordering
-// and returns the best total value. Only for small sites (<= ~12 chambers).
-// ----------------------------------------------------------------------------
+
+
 class BruteForce {
     const Site& site;
     int best = 0;
@@ -262,16 +236,14 @@ public:
     }
 };
 
-// ----------------------------------------------------------------------------
-// Sample sites / test scenarios
-// ----------------------------------------------------------------------------
+
 static void banner(const string& t) {
     cout << "\n==============================================================\n"
          << t << "\n"
          << "==============================================================\n";
 }
 
-// Scenario 1: locked chambers only (prerequisites)
+
 static void scenarioLocked() {
     banner("TEST 1: Locked chambers (artifact prerequisites)");
     Site s;
@@ -282,11 +254,10 @@ static void scenarioLocked() {
     s.addPassage(gate, store);
     s.addPassage(gate, altar);
     s.addPassage(store, vault, {"Bronze Key"});
-    // Vault has a much better ratio, but is locked until the key is found.
     Planner::plan(s, gate, 15);
 }
 
-// Scenario 2: a passage is revealed mid-dig
+
 static void scenarioReveal() {
     banner("TEST 2: Passage revealed mid-exploration");
     Site s;
@@ -296,13 +267,13 @@ static void scenarioReveal() {
     int shrine= s.addChamber("Hidden Shrine", 3, 30);
     s.addPassage(gate, hall);
     s.addPassage(gate, pit);
-    int secret = s.addPassage(hall, shrine, {}, /*active=*/false);  // hidden at start
+    int secret = s.addPassage(hall, shrine, {}, 
     vector<Event> ev = {{hall, secret, true,
                          "Scroll decoded - secret door to Hidden Shrine revealed!"}};
     Planner::plan(s, gate, 12, ev);
 }
 
-// Scenario 3: a passage is sealed mid-dig and the planner re-routes
+
 static void scenarioSeal() {
     banner("TEST 3: Passage sealed mid-exploration (alternate route)");
     Site s;
@@ -312,14 +283,14 @@ static void scenarioSeal() {
     int treasury = s.addChamber("Royal Treasury", 4, 28);
     s.addPassage(gate, store);
     s.addPassage(gate, side);
-    int direct = s.addPassage(store, treasury);   // shortcut, will collapse
-    s.addPassage(side, treasury);                 // long way round
+    int direct = s.addPassage(store, treasury);   
+    s.addPassage(side, treasury);                 
     vector<Event> ev = {{store, direct, false,
                          "Ceiling unstable - tunnel Storeroom -> Royal Treasury SEALED!"}};
     Planner::plan(s, gate, 14, ev);
 }
 
-// Scenario 4: combined, larger site with all three behaviours
+
 static void scenarioFull() {
     banner("TEST 4: Full expedition (locks + reveals + seals)");
     Site s;
@@ -348,14 +319,14 @@ static void scenarioFull() {
     Planner::plan(s, gate, 22, ev);
 }
 
-// Scenario 5: greedy vs brute force on small static sites
+
 static void scenarioBaseline() {
     banner("TEST 5: Greedy planner vs brute-force baseline (static sites)");
 
     struct Case { string name; Site site; int budget; };
     vector<Case> cases;
 
-    {   // Case A: greedy is optimal
+    {   
         Site s;
         int g = s.addChamber("Entrance", 0, 0);
         int a = s.addChamber("A", 2, 10, {"k1"});
@@ -366,16 +337,16 @@ static void scenarioBaseline() {
         s.addPassage(a, c, {"k1"});
         cases.push_back({"Case A", s, 9});
     }
-    {   // Case B: greedy can be beaten (knapsack-like trap)
+    {   
         Site s;
         int g = s.addChamber("Entrance", 0, 0);
-        int a = s.addChamber("Efficient-but-bulky", 6, 24);  // ratio 4.0
-        int b = s.addChamber("Medium-1", 5, 19);             // ratio 3.8
-        int c = s.addChamber("Medium-2", 5, 19);             // ratio 3.8
+        int a = s.addChamber("Efficient-but-bulky", 6, 24);  
+        int b = s.addChamber("Medium-1", 5, 19);             
+        int c = s.addChamber("Medium-2", 5, 19);             
         s.addPassage(g, a); s.addPassage(g, b); s.addPassage(g, c);
         cases.push_back({"Case B", s, 10});
     }
-    {   // Case C: chain with locks
+    {   
         Site s;
         int g = s.addChamber("Entrance", 0, 0);
         int a = s.addChamber("A", 1, 3, {"x"});
